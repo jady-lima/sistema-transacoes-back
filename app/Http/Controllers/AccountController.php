@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Client;
 use App\Models\Accounts;
+use App\Models\Transactions;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\AccountRequest;
 use App\Http\Requests\TransactionRequest;
@@ -31,7 +32,7 @@ class AccountController extends Controller
                 ], 403);
             }
 
-            $accounts = Accounts::all();
+            $accounts = Accounts::with('client')->get();
 
             return response()->json([
                 'accounts' => $accounts
@@ -56,7 +57,7 @@ class AccountController extends Controller
             if (!$user) {
                 return response()->json([
                     'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
-                ], 500);
+                ], 401);
             }
 
             if ($user->client) {
@@ -105,7 +106,7 @@ class AccountController extends Controller
             if (!$user) {
                 return response()->json([
                     'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
-                ], 500);
+                ], 401);
             }
 
             $account = Accounts::where("number", $data["number"])
@@ -121,9 +122,22 @@ class AccountController extends Controller
 
             if ($data['type'] === 'credit') {
                 $account->balance += $data['ammount'];
+
+                $transaction = Transactions::create([
+                    'account_id' => $account->id,
+                    'type' => 'credit',
+                    'amount' => $data['ammount'],
+                ]);
+
             } else if ($data['type'] === 'debit') {
                 if ($data['ammount'] <= $account->balance) {
                     $account->balance -= $data['ammount'];
+
+                    $transaction = Transactions::create([
+                        'account_id' => $account->id,
+                        'type' => 'debit',
+                        'amount' => $data['ammount'],
+                    ]);
                 } else {
                     return response()->json([
                         'message' => 'Erro ao realizar saque em conta. Valor nao disponivel.',
@@ -133,6 +147,7 @@ class AccountController extends Controller
             }
 
             $account->save();
+            $transaction->save();
 
             return response()->json([
                 'message' => 'Transação efetuada com sucesso!',
@@ -144,6 +159,39 @@ class AccountController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function listAllClientTransaction()
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json([
+                'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
+            ], 401);
+        }
+
+        $client = Client::where('user_id', $user->id)->first();
+        if (!$client) {
+            return response()->json([
+                'message' => 'Este usuario não possui conta como cliente ativa',
+                'error' => true
+            ], 400);
+        }
+
+        $account = Accounts::where('client_id', $client->id)->first();
+        if (!$account) {
+            return response()->json([
+                'message' => 'Este cliente nao possui conta.',
+                'error' => true
+            ], 400);
+        }
+
+        $transactions = Transactions::where('account_id', $account->id)->get();
+
+        return response()->json([
+            'client' => $client,
+            'transactions' => $transactions
+        ], 200);
     }
 
     private function createAccount(Client $client)
