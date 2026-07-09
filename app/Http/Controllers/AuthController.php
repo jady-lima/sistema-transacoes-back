@@ -17,9 +17,9 @@ class AuthController extends Controller
         $credentials = $request->validated();
 
         if(!Auth::attempt($credentials)) {
-            throw ValidationException::withMessages([
-                'email' => ['As credenciais fornecidas estao incorretas.'],
-            ]);
+            return response()->json([
+                'message' => 'E-mail ou senha inválidos'
+            ], 401);
         }
 
         $user = Auth::user();
@@ -31,6 +31,8 @@ class AuthController extends Controller
             abilities: $user->role === 'admin' ? ['admin'] : ['cliente']
         )->plainTextToken;
 
+        $is_client = $user->role === 'cliente' && $user->client()->whereHas('accounts')->exists();
+
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -38,7 +40,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'role' => $user->role
+                'role' => $user->role,
+                'is_client' => $is_client,
             ]
         ]);
     }
