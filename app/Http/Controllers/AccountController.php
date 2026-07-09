@@ -9,6 +9,7 @@ use App\Models\Transactions;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\AccountRequest;
 use App\Http\Requests\TransactionRequest;
+use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
@@ -105,54 +106,102 @@ class AccountController extends Controller
             $user = Auth::user();
             if (!$user) {
                 return response()->json([
-                    'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
+                    'message' => 'Usuário não autenticado. Por favor, realize o login para continuar.'
                 ], 401);
             }
 
-            $account = Accounts::where("number", $data["number"])
-                            ->where("agency", $data["agency"])
-                            ->first();
-            
-            if(!$account) {
-                return response()->json([
-                    'message' => 'Erro ao adicionar credito. A conta nao existe.',
-                    'error' => true
-                ], 400);
-            }
+            return DB::transaction(function () use ($data, $user) {
+                $client = Client::where('user_id', $user->id)->first();
 
-            if ($data['type'] === 'credit') {
-                $account->balance += $data['amount'];
+                if (!$client) {
+                    return response()->json([
+                        'message' => 'Cliente nao encontrado para o usuario autenticado.',
+                        'error' => true
+                    ], 404);
+                }
 
-                $transaction = Transactions::create([
-                    'account_id' => $account->id,
-                    'type' => 'credit',
-                    'amount' => $data['amount'],
-                ]);
+                $originAccount = Accounts::where('client_id', $client->id)->first();
+                if (!$originAccount) {
+                    return response()->json([
+                        'message' => 'O usuario autenticado nao possui conta.',
+                        'error' => true
+                    ], 404);
+                }
 
-            } else if ($data['type'] === 'debit') {
-                if ($data['amount'] <= $account->balance) {
-                    $account->balance -= $data['amount'];
+                $destinationAccount = Accounts::where('number', $data['number'])
+                    ->where('agency', $data['agency'])
+                    ->first();
 
-                    $transaction = Transactions::create([
-                        'account_id' => $account->id,
-                        'type' => 'debit',
+                if (!$destinationAccount) {
+                    return response()->json([
+                        'message' => 'Conta de destino nao encontrada.',
+                        'error' => true
+                    ], 404);
+                }
+
+                if ($data['type'] === 'credit') {
+                    $destinationAccount->balance += $data['amount'];
+                    $destinationAccount->save();
+
+                    Transactions::create([
+                        'account_id' => $destinationAccount->id,
+                        'type' => 'credit',
                         'amount' => $data['amount'],
                     ]);
-                } else {
+
                     return response()->json([
-                        'message' => 'Erro ao realizar saque em conta. Valor nao disponivel.',
-                        'error' => true
-                    ], 400);
+                        'message' => 'Crédito efetuado com sucesso!',
+                        'saldo' => $destinationAccount->balance,
+                    ]);
                 }
-            }
 
-            $account->save();
-            $transaction->save();
+                if ($data['type'] === 'debit') {
+                    if ($originAccount->id === $destinationAccount->id) {
+                        $originAccount->balance -= $data['amount'];
 
-            return response()->json([
-                'message' => 'Transação efetuada com sucesso!',
-                'saldo' => $account->balance,
-            ]);
+                        return response()->json([
+                            'message' => 'Saque efetuado com sucesso!',
+                            'saldo' => $originAccount->balance,
+                        ]);
+                    } else {
+                        if ($data['amount'] > $originAccount->balance) {
+                            return response()->json([
+                                'message' => 'Saldo insuficiente para realizar a transferencia.',
+                                'error' => true
+                            ], 400);
+                        }
+
+                        $originAccount->balance -= $data['amount'];
+                        $destinationAccount->balance += $data['amount'];
+
+                        $originAccount->save();
+                        $destinationAccount->save();
+
+                        Transactions::create([
+                            'account_id' => $originAccount->id,
+                            'type' => 'debit',
+                            'amount' => $data['amount'],
+                        ]);
+
+                        Transactions::create([
+                            'account_id' => $destinationAccount->id,
+                            'type' => 'credit',
+                            'amount' => $data['amount'],
+                        ]);
+
+                        return response()->json([
+                            'message' => 'Transferencia efetuada com sucesso!',
+                            'saldo' => $originAccount->balance,
+                        ]);
+                    }
+                }
+
+                return response()->json([
+                    'message' => 'Tipo de transacao invalido.',
+                    'error' => true
+                ], 400);
+            });
+
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Erro ao efetuar transacao. Tente novamente em instantes.',
