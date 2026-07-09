@@ -121,22 +121,22 @@ class AccountController extends Controller
             }
 
             if ($data['type'] === 'credit') {
-                $account->balance += $data['ammount'];
+                $account->balance += $data['amount'];
 
                 $transaction = Transactions::create([
                     'account_id' => $account->id,
                     'type' => 'credit',
-                    'amount' => $data['ammount'],
+                    'amount' => $data['amount'],
                 ]);
 
             } else if ($data['type'] === 'debit') {
-                if ($data['ammount'] <= $account->balance) {
-                    $account->balance -= $data['ammount'];
+                if ($data['amount'] <= $account->balance) {
+                    $account->balance -= $data['amount'];
 
                     $transaction = Transactions::create([
                         'account_id' => $account->id,
                         'type' => 'debit',
-                        'amount' => $data['ammount'],
+                        'amount' => $data['amount'],
                     ]);
                 } else {
                     return response()->json([
@@ -186,10 +186,19 @@ class AccountController extends Controller
             ], 400);
         }
 
-        $transactions = Transactions::where('account_id', $account->id)->get();
+        $transactions = Transactions::where('account_id', $account->id)
+                                    ->orderBy('created_at', 'desc')
+                                    ->get();
 
         return response()->json([
             'client' => $client,
+            'account' => [
+                'id' => $account->id,
+                'number' => $account->number,
+                'agency' => $account->agency,
+                'balance' => $account->balance,
+                'status' => $account->status,
+            ],
             'transactions' => $transactions
         ], 200);
     }
