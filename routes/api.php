@@ -23,5 +23,6 @@ Route::middleware('auth:sanctum')->group(function () {
     //Cliente
     Route::middleware('role:cliente')->prefix('cliente')->group(function () {
         Route::resource('contas', AccountController::class)->only(['store']);
+        Route::post('/conta', [AccountController::class, 'newTransaction']);
     });
 });

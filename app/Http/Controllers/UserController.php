@@ -25,7 +25,7 @@ class UserController extends Controller
 
             if(!$user->isAdmin()) {
                 return response()->json([
-                    'message' => 'Acesso negado. Apenas administradores podem listar todas as contas.'
+                    'message' => 'Acesso negado. Apenas administradores podem listar todos os usuários.'
                 ], 403);
             }
 

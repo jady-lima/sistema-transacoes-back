@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Accounts;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\AccountRequest;
+use App\Http\Requests\TransactionRequest;
 
 class AccountController extends Controller
 {
@@ -20,7 +21,7 @@ class AccountController extends Controller
 
             if (!$user) {
                 return response()->json([
-                    'message' => 'Usuário não autenticado.'
+                    'message' => 'Usuário nao autenticado.'
                 ], 401);
             }
 
@@ -52,10 +53,9 @@ class AccountController extends Controller
             $data = $request->validated();
 
             $user = Auth::user();
-
             if (!$user) {
                 return response()->json([
-                    'message' => 'Erro ao buscar usuário para criar conta.'
+                    'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
                 ], 500);
             }
 
@@ -88,6 +88,59 @@ class AccountController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Erro ao criar conta. Tente novamente em instantes.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Função que realiza nova transação do cliente
+     */
+    public function newTransaction(TransactionRequest $request)
+    {
+        try {
+            $data = $request->validated();
+
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
+                ], 500);
+            }
+
+            $account = Accounts::where("number", $data["number"])
+                            ->where("agency", $data["agency"])
+                            ->first();
+            
+            if(!$account) {
+                return response()->json([
+                    'message' => 'Erro ao adicionar credito. A conta nao existe.',
+                    'error' => true
+                ], 400);
+            }
+
+            if ($data['type'] === 'credit') {
+                $account->balance += $data['ammount'];
+            } else if ($data['type'] === 'debit') {
+                if ($data['ammount'] <= $account->balance) {
+                    $account->balance -= $data['ammount'];
+                } else {
+                    return response()->json([
+                        'message' => 'Erro ao realizar saque em conta. Valor nao disponivel.',
+                        'error' => true
+                    ], 400);
+                }
+            }
+
+            $account->save();
+
+            return response()->json([
+                'message' => 'Transação efetuada com sucesso!',
+                'saldo' => $account->balance,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao efetuar transacao. Tente novamente em instantes.',
                 'error' => $e->getMessage()
             ], 500);
         }
