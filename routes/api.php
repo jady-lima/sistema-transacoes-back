@@ -4,9 +4,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 use \App\Http\Controllers\AuthController;
-use \App\Http\Controllers\Admin\UserController;
 use \App\Http\Controllers\AccountController;
+use \App\Http\Controllers\UserController;
 
+Route::post('/register', [UserController::class, 'store']);
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -14,7 +15,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     //Admin
-    Route::middleware('role:admin')->prefix('admin')->group(function () {       
+    Route::middleware('role:admin')->prefix('admin')->group(function () {   
+        Route::get('/usuarios', [UserController::class, 'listAll']);    
         Route::get('/contas', [AccountController::class, 'listAll']);
     });
 
