@@ -25,7 +25,7 @@ class TransactionRequest extends FormRequest
         return [
             "number" => "required|string",
             "agency" => "required|string",
-            "ammount" => "required",
+            "amount" => "required",
             "type" => "required"
         ];
     }
