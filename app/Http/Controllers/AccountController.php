@@ -33,7 +33,7 @@ class AccountController extends Controller
                 ], 403);
             }
 
-            $accounts = Accounts::with('client')->get();
+            $accounts = Accounts::with('client.user')->get();
 
             return response()->json([
                 'accounts' => $accounts

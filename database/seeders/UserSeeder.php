@@ -18,7 +18,7 @@ class UserSeeder extends Seeder
             ['email' => 'admin@email.com'],
             [
                 'name' => 'Administrador',
-                'password' => Hash::make('12345678'),
+                'password' => Hash::make(hash('sha256', '12345678')),
                 'role' => 'admin',
             ]
         );
@@ -27,7 +27,7 @@ class UserSeeder extends Seeder
             ['email' => 'cliente@email.com'],
             [
                 'name' => 'Cliente um',
-                'password' => Hash::make('12345678'),
+                'password' => Hash::make(hash('sha256', '12345678')),
                 'role' => 'cliente',
             ]
         );
@@ -36,7 +36,7 @@ class UserSeeder extends Seeder
             ['email' => 'cliente2@email.com'],
             [
                 'name' => 'Cliente Dois',
-                'password' => Hash::make('12345678'),
+                'password' => Hash::make(hash('sha256', '12345678')),
                 'role' => 'cliente',
             ]
         );
