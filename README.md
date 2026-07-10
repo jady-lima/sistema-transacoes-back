@@ -27,16 +27,7 @@ cd sistema-transacoes-back
 
 ## Configuração do ambiente
 
-O projeto utiliza um arquivo `.env` para armazenar as configurações de ambiente. Copie o `.env.example` e renomeie para `.env` substituindo o link da api backend para correspondente.
-
-```
-DB_CONNECTION=pgsql
-DB_HOST=db
-DB_PORT=5432
-DB_DATABASE=sistema-transacoes
-DB_USERNAME={USERNAME}
-DB_PASSWORD={PASS}
-```
+O projeto utiliza um arquivo `.env` para armazenar as configurações de ambiente. Copie o `.env.example` e renomeie para `.env`.
 
 ## Executando o projeto pela primeira vez
 
