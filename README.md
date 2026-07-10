@@ -51,27 +51,10 @@ Para iniciar a aplicação sem manter o terminal ocupado, execute:
 docker compose up --build -d
 ```
 
-# Gerar a chave da aplicação
-```
-docker compose exec app php artisan key:generate
-```
-
-# Executar as migrations
-```
-docker compose exec app php artisan migrate
-```
-
-Executar os seeder:
-
-```
-docker compose exec app php artisan migrate --seed
-```
-
 # Conferir funcionamento da aplicação
 ```
 http://host.docker.internal:8000
 ```
-
 
 ## Parando a aplicação
 
@@ -94,3 +77,17 @@ Ou em segundo plano:
 ```bash
 docker compose up -d
 ```
+## Executando teste
+```
+docker compose exec app php artisan test
+```
+
+## Acesso como admin para testes
+email: `admin@email.com`
+
+senha: `12345678`
+
+## Acesso como usuário sem conta
+email: `cliente@email.com`
+
+senha: `12345678`
