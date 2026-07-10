@@ -75,7 +75,7 @@ class UserTest extends TestCase
     /**
      * Teste que verifica se o cliente está conseguindo listar todas os usuários do sistema
      */
-    public function test_cliente_listar_contas(): void
+    public function test_cliente_sem_acesso_para_listar_contas(): void
     {
         User::factory()->create([
             'email' => 'cliente.usuarios@gmail.com',

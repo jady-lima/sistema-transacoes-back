@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\WithFaker;
 use App\Models\User;
 use App\Models\Client;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -49,7 +50,7 @@ class AccountTest extends TestCase
     /**
      * Teste que verifica se o cliente está conseguindo listar todas as contas registradas no sistema
      */
-    public function test_cliente_listar_contas(): void
+    public function test_cliente_sem_acesso_para_listar_contas(): void
     {
         User::factory()->create([
             'email' => 'cliente.contas@gmail.com',
@@ -110,7 +111,7 @@ class AccountTest extends TestCase
     /**
      * Teste para criar a conta de um usuário sem token
      */
-    public function test_cliente_cria_conta_sem_token(): void
+    public function test_cliente_sem_token_tenta_criar_conta(): void
     {
         $response = $this->postJson('/api/cliente/contas', [
                             'phone' => '849568746321',
@@ -126,7 +127,7 @@ class AccountTest extends TestCase
     /**
      * Teste para criar a conta de um usuário com dados inválidos
      */
-    public function test_cliente_cria_conta_dados_invalidos(): void
+    public function test_cliente_dados_invalidos_tenta_criar_conta(): void
     {
         User::factory()->create([
             'email' => 'cliente.invalido@gmail.com',
@@ -195,7 +196,7 @@ class AccountTest extends TestCase
     /**
      * Teste se cliente sem conta ativa consegue acessar
      */
-    public function test_usuario_sem_conta_lista_transacoes(): void
+    public function test_usuario_sem_conta_tenta_listar_transacoes(): void
     {
         User::factory()->create([
             'email' => 'user.lista.transacoes@gmail.com',
@@ -223,5 +224,221 @@ class AccountTest extends TestCase
                 ]);
     }
 
-    
+    /**
+     * Solicitação de cliente para nova transação de crédito
+     */
+    public function test_cliente_cria_nova_transacao_credito(): void
+    {
+        User::factory()->create([
+            'email' => 'cliente.novo@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginResponse = $this->postJson('/api/login', [
+            'email' => 'cliente.novo@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $token = $loginResponse->json('access_token');
+
+        $responseConta = $this->withToken($token)
+            ->postJson('/api/cliente/contas', [
+                'phone' => '849568746321',
+                'cpf' => '12364597862',
+            ]);
+
+        $responseConta->assertCreated();
+
+        $number = $responseConta->json('account.number');
+        $agency = $responseConta->json('account.agency');
+
+        $number = (string) $responseConta->json('account.number');
+
+        $response = $this->withToken($token)
+            ->postJson('/api/cliente/contas/transacao', [
+                'number' => $number,
+                'agency' => '0001',
+                'amount' => '2000.00',
+                'type' => 'credit',
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJson([
+                'message' => 'Crédito efetuado com sucesso!',
+                'saldo' => 2000,
+            ]);
+    }
+
+    /**
+     * Solicitação de cliente para nova transação de débito para própria conta(saque)
+     */
+    public function test_cliente_cria_nova_transacao_debito_como_saque(): void
+    {
+        User::factory()->create([
+            'email' => 'cliente.novo@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginResponse = $this->postJson('/api/login', [
+            'email' => 'cliente.novo@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $token = $loginResponse->json('access_token');
+
+        $responseConta = $this->withToken($token)
+            ->postJson('/api/cliente/contas', [
+                'phone' => '849568746321',
+                'cpf' => '12364597862',
+            ]);
+
+        $responseConta->assertCreated();
+
+        $number = $responseConta->json('account.number');
+        $agency = $responseConta->json('account.agency');
+
+        $number = (string) $responseConta->json('account.number');
+
+        $response = $this->withToken($token)
+            ->postJson('/api/cliente/contas/transacao', [
+                'number' => $number,
+                'agency' => '0001',
+                'amount' => '2000.00',
+                'type' => 'credit',
+            ]);
+
+        $response = $this->withToken($token)
+            ->postJson('/api/cliente/contas/transacao', [
+                'number' => $number,
+                'agency' => '0001',
+                'amount' => '1000.00',
+                'type' => 'debit',
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJson([
+                'message' => 'Saque efetuado com sucesso!',
+                'saldo' => 1000,
+            ]);
+    }
+
+    /**
+     * Solicitação de cliente para nova transação de débito para outra conta.
+     */
+    public function test_cliente_cria_nova_transacao_debito_como_transferencia(): void
+    {
+        User::factory()->create([
+            'name' => 'Cliente origem',
+            'email' => 'cliente.origem@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginOrigem = $this->postJson('/api/login', [
+            'email' => 'cliente.origem@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $loginOrigem->assertOk()
+                    ->assertJsonStructure([
+                        'access_token',
+                    ]);
+
+        $tokenOrigem = $loginOrigem->json('access_token');
+        $responseContaOrigem = $this->withToken($tokenOrigem)
+                                    ->postJson('/api/cliente/contas', [
+                                        'phone' => '849568746321',
+                                        'cpf' => '12364597862',
+                                    ]);
+
+        $responseContaOrigem->assertCreated();
+
+        $contaOrigemId = $responseContaOrigem->json('account.id');
+        $numeroContaOrigem = (string) $responseContaOrigem->json('account.number');
+
+        User::factory()->create([
+            'name' => 'Cliente destino',
+            'email' => 'cliente.destino@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $this->withoutToken();
+        Auth::shouldUse('web');
+
+        $loginDestino = $this->postJson('/api/login', [
+            'email' => 'cliente.destino@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $loginDestino->assertOk()
+                    ->assertJsonStructure([
+                        'access_token',
+                    ]);
+        $tokenDestino = $loginDestino->json('access_token');
+        $responseContaDestino = $this->withToken($tokenDestino)
+                                    ->postJson('/api/cliente/contas', [
+                                        'phone' => '849568746322',
+                                        'cpf' => '12364597863',
+                                    ]);
+
+        $responseContaDestino->assertCreated();
+
+        $contaDestinoId = $responseContaDestino->json('account.id');
+        $numeroContaDestino = (string) $responseContaDestino->json('account.number');
+
+        $responseCredito = $this->withToken($tokenOrigem)
+                                ->postJson('/api/cliente/contas/transacao', [
+                                    'number' => $numeroContaOrigem,
+                                    'agency' => '0001',
+                                    'amount' => 2000.00,
+                                    'type' => 'credit',
+                                ]);
+
+        $responseCredito->assertOk()
+                        ->assertJson([
+                            'message' => 'Crédito efetuado com sucesso!',
+                            'saldo' => 2000,
+                        ]);
+
+        $responseTransferencia = $this->withToken($tokenOrigem)
+                                    ->postJson('/api/cliente/contas/transacao', [
+                                        'number' => $numeroContaDestino,
+                                        'agency' => '0001',
+                                        'amount' => 1000.00,
+                                        'type' => 'debit',
+                                    ]);
+
+        $responseTransferencia->assertOk()
+                            ->assertJson([
+                                'message' => 'Transferencia efetuada com sucesso!',
+                                'saldo' => 1000,
+                            ]);
+
+        $this->assertDatabaseHas('accounts', [
+            'id' => $contaOrigemId,
+            'balance' => 1000.00,
+        ]);
+
+        $this->assertDatabaseHas('accounts', [
+            'id' => $contaDestinoId,
+            'balance' => 1000.00,
+        ]);
+
+        $this->assertDatabaseHas('transactions', [
+            'account_id' => $contaOrigemId,
+            'type' => 'debit',
+            'amount' => 1000.00,
+        ]);
+
+        $this->assertDatabaseHas('transactions', [
+            'account_id' => $contaDestinoId,
+            'type' => 'credit',
+            'amount' => 1000.00,
+        ]);
+    }
 }
