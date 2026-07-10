@@ -243,32 +243,73 @@ class AccountTest extends TestCase
         $token = $loginResponse->json('access_token');
 
         $responseConta = $this->withToken($token)
-            ->postJson('/api/cliente/contas', [
-                'phone' => '849568746321',
-                'cpf' => '12364597862',
-            ]);
+                            ->postJson('/api/cliente/contas', [
+                                'phone' => '849568746321',
+                                'cpf' => '12364597862',
+                            ]);
 
         $responseConta->assertCreated();
 
         $number = $responseConta->json('account.number');
-        $agency = $responseConta->json('account.agency');
 
         $number = (string) $responseConta->json('account.number');
 
         $response = $this->withToken($token)
-            ->postJson('/api/cliente/contas/transacao', [
-                'number' => $number,
-                'agency' => '0001',
-                'amount' => '2000.00',
-                'type' => 'credit',
-            ]);
+                ->postJson('/api/cliente/contas/transacao', [
+                    'number' => $number,
+                    'agency' => '0001',
+                    'amount' => '2000.00',
+                    'type' => 'credit',
+                ]);
 
-        $response
-            ->assertOk()
-            ->assertJson([
-                'message' => 'Crédito efetuado com sucesso!',
-                'saldo' => 2000,
-            ]);
+        $response->assertOk()
+                ->assertJson([
+                    'message' => 'Crédito efetuado com sucesso!',
+                    'saldo' => 2000,
+                ]);
+    }
+
+    /**
+     * Solicitação de cliente para nova transação de crédito com valor inválido
+     */
+    public function test_cliente_cria_nova_transacao_credito_valor_negativo(): void
+    {
+        User::factory()->create([
+            'email' => 'cliente.novo@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginResponse = $this->postJson('/api/login', [
+            'email' => 'cliente.novo@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $token = $loginResponse->json('access_token');
+
+        $responseConta = $this->withToken($token)
+                            ->postJson('/api/cliente/contas', [
+                                'phone' => '849568746321',
+                                'cpf' => '12364597862',
+                            ]);
+
+        $responseConta->assertCreated();
+
+        $number = $responseConta->json('account.number');
+        $number = (string) $responseConta->json('account.number');
+
+        $response = $this->withToken($token)
+                        ->postJson('/api/cliente/contas/transacao', [
+                            'number' => $number,
+                            'agency' => '0001',
+                            'amount' => -1,
+                            'type' => 'credit',
+                        ]);
+
+        $response->assertStatus(400)
+                ->assertJson([
+                    'message' => 'Valor de transação precisa ser maior que 0.',
+                ]);
     }
 
     /**
@@ -290,40 +331,88 @@ class AccountTest extends TestCase
         $token = $loginResponse->json('access_token');
 
         $responseConta = $this->withToken($token)
-            ->postJson('/api/cliente/contas', [
-                'phone' => '849568746321',
-                'cpf' => '12364597862',
-            ]);
+                            ->postJson('/api/cliente/contas', [
+                                'phone' => '849568746321',
+                                'cpf' => '12364597862',
+                            ]);
 
         $responseConta->assertCreated();
 
         $number = $responseConta->json('account.number');
-        $agency = $responseConta->json('account.agency');
+        $number = (string) $responseConta->json('account.number');
 
+        $response = $this->withToken($token)
+                        ->postJson('/api/cliente/contas/transacao', [
+                            'number' => $number,
+                            'agency' => '0001',
+                            'amount' => '2000.00',
+                            'type' => 'credit',
+                        ]);
+
+        $response = $this->withToken($token)
+                        ->postJson('/api/cliente/contas/transacao', [
+                            'number' => $number,
+                            'agency' => '0001',
+                            'amount' => '1000.00',
+                            'type' => 'debit',
+                        ]);
+
+        $response->assertOk()
+                ->assertJson([
+                    'message' => 'Saque efetuado com sucesso!',
+                    'saldo' => 1000,
+                ]);
+    }
+
+    /**
+     * Solicitação de cliente para nova transação de débito para própria conta(saque) com valor negativo
+     */
+    public function test_cliente_cria_nova_transacao_debito_como_saque_valor_negativo(): void
+    {
+        User::factory()->create([
+            'email' => 'cliente.novo@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginResponse = $this->postJson('/api/login', [
+            'email' => 'cliente.novo@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $token = $loginResponse->json('access_token');
+
+        $responseConta = $this->withToken($token)
+                            ->postJson('/api/cliente/contas', [
+                                'phone' => '849568746321',
+                                'cpf' => '12364597862',
+                            ]);
+
+        $responseConta->assertCreated();
+
+        $number = $responseConta->json('account.number');
         $number = (string) $responseConta->json('account.number');
 
         $response = $this->withToken($token)
             ->postJson('/api/cliente/contas/transacao', [
                 'number' => $number,
                 'agency' => '0001',
-                'amount' => '2000.00',
+                'amount' => 200.00,
                 'type' => 'credit',
             ]);
 
         $response = $this->withToken($token)
-            ->postJson('/api/cliente/contas/transacao', [
-                'number' => $number,
-                'agency' => '0001',
-                'amount' => '1000.00',
-                'type' => 'debit',
-            ]);
+                        ->postJson('/api/cliente/contas/transacao', [
+                            'number' => $number,
+                            'agency' => '0001',
+                            'amount' => -200,
+                            'type' => 'debit',
+                        ]);
 
-        $response
-            ->assertOk()
-            ->assertJson([
-                'message' => 'Saque efetuado com sucesso!',
-                'saldo' => 1000,
-            ]);
+        $response->assertStatus(400)
+                ->assertJson([
+                    'message' => 'Valor de transação precisa ser maior que 0.',
+                ]);
     }
 
     /**
@@ -440,5 +529,56 @@ class AccountTest extends TestCase
             'type' => 'credit',
             'amount' => 1000.00,
         ]);
+    }
+
+    /**
+     * Solicitação de cliente para nova transação de débito para própria conta(saque) com valor superior ao em conta
+     */
+    public function test_cliente_cria_nova_transacao_debito_como_saque_valor_maior_que_saldo(): void
+    {
+        User::factory()->create([
+            'email' => 'cliente.novo@gmail.com',
+            'password' => Hash::make('senha123'),
+            'role' => 'cliente',
+        ]);
+
+        $loginResponse = $this->postJson('/api/login', [
+            'email' => 'cliente.novo@gmail.com',
+            'password' => 'senha123',
+        ]);
+
+        $token = $loginResponse->json('access_token');
+
+        $responseConta = $this->withToken($token)
+                            ->postJson('/api/cliente/contas', [
+                                'phone' => '849568746321',
+                                'cpf' => '12364597862',
+                            ]);
+
+        $responseConta->assertCreated();
+
+        $number = $responseConta->json('account.number');
+        $number = (string) $responseConta->json('account.number');
+
+        $response = $this->withToken($token)
+            ->postJson('/api/cliente/contas/transacao', [
+                'number' => $number,
+                'agency' => '0001',
+                'amount' => 200.00,
+                'type' => 'credit',
+            ]);
+
+        $response = $this->withToken($token)
+                        ->postJson('/api/cliente/contas/transacao', [
+                            'number' => $number,
+                            'agency' => '0001',
+                            'amount' => 2000,
+                            'type' => 'debit',
+                        ]);
+
+        $response->assertStatus(400)
+                ->assertJson([
+                    'message' => 'Saldo insuficiente para realizar a transferencia.',
+                ]);
     }
 }

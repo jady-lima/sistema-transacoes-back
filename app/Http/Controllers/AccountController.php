@@ -122,6 +122,12 @@ class AccountController extends Controller
                     ], 404);
                 }
 
+                if ($data['amount'] <= 0) {
+                    return response()->json([
+                        'message' => 'Valor de transação precisa ser maior que 0.',
+                    ], 400);
+                }
+
                 if ($data['type'] === 'credit') {
                     $destinationAccount->balance += $data['amount'];
                     $destinationAccount->save();
@@ -139,6 +145,13 @@ class AccountController extends Controller
                 }
 
                 if ($data['type'] === 'debit') {
+                    if ($data['amount'] > $originAccount->balance) {
+                        return response()->json([
+                            'message' => 'Saldo insuficiente para realizar a transferencia.',
+                            'error' => true
+                        ], 400);
+                    }
+
                     if ($originAccount->id === $destinationAccount->id) {
                         $originAccount->balance -= $data['amount'];
                         $originAccount->save();
@@ -148,13 +161,6 @@ class AccountController extends Controller
                             'saldo' => $originAccount->balance,
                         ]);
                     } else {
-                        if ($data['amount'] > $originAccount->balance) {
-                            return response()->json([
-                                'message' => 'Saldo insuficiente para realizar a transferencia.',
-                                'error' => true
-                            ], 400);
-                        }
-
                         $originAccount->balance -= $data['amount'];
                         $destinationAccount->balance += $data['amount'];
 
