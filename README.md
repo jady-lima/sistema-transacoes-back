@@ -53,7 +53,7 @@ Para iniciar a aplicação sem manter o terminal ocupado, execute:
 docker compose up --build -d
 ```
 
-# Conferir funcionamento da aplicação
+## Conferir funcionamento da aplicação
 ```
 http://host.docker.internal:8000
 ```
