@@ -17,12 +17,6 @@ class UserController extends Controller
         try {
             $user = Auth::user();
 
-            if (!$user) {
-                return response()->json([
-                    'message' => 'Usuário não autenticado.'
-                ], 401);
-            }
-
             if(!$user->isAdmin()) {
                 return response()->json([
                     'message' => 'Acesso negado. Apenas administradores podem listar todos os usuários.'

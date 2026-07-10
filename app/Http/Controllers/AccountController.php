@@ -18,15 +18,8 @@ class AccountController extends Controller
      */
     public function listAll()
     {
-        try{ 
+        try{
             $user = Auth::user();
-
-            if (!$user) {
-                return response()->json([
-                    'message' => 'Usuário nao autenticado.'
-                ], 401);
-            }
-
             if(!$user->isAdmin()) {
                 return response()->json([
                     'message' => 'Acesso negado. Apenas administradores podem listar todas as contas.'
@@ -55,11 +48,6 @@ class AccountController extends Controller
             $data = $request->validated();
 
             $user = Auth::user();
-            if (!$user) {
-                return response()->json([
-                    'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
-                ], 401);
-            }
 
             if ($user->client) {
                 return response()->json([
@@ -104,11 +92,6 @@ class AccountController extends Controller
             $data = $request->validated();
 
             $user = Auth::user();
-            if (!$user) {
-                return response()->json([
-                    'message' => 'Usuário não autenticado. Por favor, realize o login para continuar.'
-                ], 401);
-            }
 
             return DB::transaction(function () use ($data, $user) {
                 $client = Client::where('user_id', $user->id)->first();
@@ -158,6 +141,7 @@ class AccountController extends Controller
                 if ($data['type'] === 'debit') {
                     if ($originAccount->id === $destinationAccount->id) {
                         $originAccount->balance -= $data['amount'];
+                        $originAccount->save();
 
                         return response()->json([
                             'message' => 'Saque efetuado com sucesso!',
@@ -213,11 +197,6 @@ class AccountController extends Controller
     public function listAllClientTransaction()
     {
         $user = Auth::user();
-        if (!$user) {
-            return response()->json([
-                'message' => 'Usuario nao autenticado. Por favor, realize o login para continuar.'
-            ], 401);
-        }
 
         $client = Client::where('user_id', $user->id)->first();
         if (!$client) {
