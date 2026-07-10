@@ -42,7 +42,7 @@ docker compose up --build
 Após a aplicação ser iniciada, acesse:
 
 ```text
-http://localhost:8000
+(http://host.docker.internal:8000)
 ```
 
 ## Executando em segundo plano
