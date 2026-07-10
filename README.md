@@ -1,4 +1,4 @@
-# Frontend Vue.js com Docker
+# Backend Laravel
 
 Backend da aplicação desenvolvido com **Laravel 13.19**, **PHP** e **PostgreSQL**.
 
