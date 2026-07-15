@@ -18,13 +18,13 @@ Antes de iniciar, instale:
 Clone o repositório:
 
 ```bash
-git clone https://github.com/jady-lima/sistema-transacoes-back.git
+git clone https://github.com/jady-lima/LevaEu.git
 ```
 
 Entre na pasta do projeto:
 
 ```bash
-cd sistema-transacoes-back
+cd LevaEu
 ```
 
 ## Configuração do ambiente
