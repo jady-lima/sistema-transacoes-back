@@ -8,8 +8,12 @@ use App\Models\Accounts;
 use App\Models\Transactions;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\AccountRequest;
-use App\Http\Requests\TransactionRequest;
 use Illuminate\Support\Facades\DB;
+use App\Http\Requests\AmountRequest;
+use App\Http\Requests\TransferRequest;
+use App\Services\FinancialTransactionService;
+use App\Support\Money;
+use DomainException;
 
 class AccountController extends Controller
 {
@@ -84,166 +88,169 @@ class AccountController extends Controller
     }
 
     /**
-     * Função que realiza nova transação do cliente
+     * Função responsável por realizar deposito em conta
      */
-    public function newTransaction(TransactionRequest $request)
+    public function deposit(AmountRequest $request, FinancialTransactionService $service) 
     {
-        try {
-            $data = $request->validated();
+        $account = $this->authenticatedAccount();
 
-            $user = Auth::user();
-
-            return DB::transaction(function () use ($data, $user) {
-                $client = Client::where('user_id', $user->id)->first();
-
-                if (!$client) {
-                    return response()->json([
-                        'message' => 'Cliente nao encontrado para o usuario autenticado.',
-                        'error' => true
-                    ], 404);
-                }
-
-                $originAccount = Accounts::where('client_id', $client->id)->first();
-                if (!$originAccount) {
-                    return response()->json([
-                        'message' => 'O usuario autenticado nao possui conta.',
-                        'error' => true
-                    ], 404);
-                }
-
-                $destinationAccount = Accounts::where('number', $data['number'])
-                    ->where('agency', $data['agency'])
-                    ->first();
-
-                if (!$destinationAccount) {
-                    return response()->json([
-                        'message' => 'Conta de destino nao encontrada.',
-                        'error' => true
-                    ], 404);
-                }
-
-                if ($data['amount'] <= 0) {
-                    return response()->json([
-                        'message' => 'Valor de transação precisa ser maior que 0.',
-                    ], 400);
-                }
-
-                if ($data['type'] === 'credit') {
-                    $destinationAccount->balance += $data['amount'];
-                    $destinationAccount->save();
-
-                    Transactions::create([
-                        'account_id' => $destinationAccount->id,
-                        'type' => 'credit',
-                        'amount' => $data['amount'],
-                    ]);
-
-                    return response()->json([
-                        'message' => 'Crédito efetuado com sucesso!',
-                        'saldo' => $destinationAccount->balance,
-                    ]);
-                }
-
-                if ($data['type'] === 'debit') {
-                    if ($data['amount'] > $originAccount->balance) {
-                        return response()->json([
-                            'message' => 'Saldo insuficiente para realizar a transferencia.',
-                            'error' => true
-                        ], 400);
-                    }
-
-                    if ($originAccount->id === $destinationAccount->id) {
-                        $originAccount->balance -= $data['amount'];
-                        $originAccount->save();
-
-                        return response()->json([
-                            'message' => 'Saque efetuado com sucesso!',
-                            'saldo' => $originAccount->balance,
-                        ]);
-                    } else {
-                        $originAccount->balance -= $data['amount'];
-                        $destinationAccount->balance += $data['amount'];
-
-                        $originAccount->save();
-                        $destinationAccount->save();
-
-                        Transactions::create([
-                            'account_id' => $originAccount->id,
-                            'type' => 'debit',
-                            'amount' => $data['amount'],
-                        ]);
-
-                        Transactions::create([
-                            'account_id' => $destinationAccount->id,
-                            'type' => 'credit',
-                            'amount' => $data['amount'],
-                        ]);
-
-                        return response()->json([
-                            'message' => 'Transferencia efetuada com sucesso!',
-                            'saldo' => $originAccount->balance,
-                        ]);
-                    }
-                }
-
-                return response()->json([
-                    'message' => 'Tipo de transacao invalido.',
-                    'error' => true
-                ], 400);
-            });
-
-        } catch (\Exception $e) {
+        if (!$account) {
             return response()->json([
-                'message' => 'Erro ao efetuar transacao. Tente novamente em instantes.',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => 'O usuário autenticado não possui conta.',
+            ], 404);
+        }
+
+        try {
+            $result = $service->deposit(
+                $account->id,
+                Money::toCents($request->validated('amount'))
+            );
+
+            return response()->json([
+                'message' => 'Depósito realizado com sucesso.',
+                'reference_id' => $result['reference_id'],
+                'account' => $this->accountPayload(
+                    $result['account']
+                ),
+            ]);
+        } catch (DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
         }
     }
 
-    public function listAllClientTransaction()
+    /**
+     * Função que simula saque em conta
+     */
+    public function withdrawal(AmountRequest $request, FinancialTransactionService $service) 
     {
-        $user = Auth::user();
+        $account = $this->authenticatedAccount();
 
-        $client = Client::where('user_id', $user->id)->first();
-        if (!$client) {
-            return response()->json([
-                'message' => 'Este usuario não possui conta como cliente ativa',
-                'error' => true
-            ], 400);
-        }
-
-        $account = Accounts::where('client_id', $client->id)->first();
         if (!$account) {
             return response()->json([
-                'message' => 'Este cliente nao possui conta.',
-                'error' => true
-            ], 400);
+                'message' => 'O usuário autenticado não possui conta.',
+            ], 404);
         }
 
-        $transactions = Transactions::where('account_id', $account->id)
-                                    ->orderBy('created_at', 'desc')
-                                    ->get();
+        try {
+            $result = $service->withdraw(
+                $account->id,
+                Money::toCents($request->validated('amount'))
+            );
+
+            return response()->json([
+                'message' => 'Saque realizado com sucesso.',
+                'reference_id' => $result['reference_id'],
+                'account' => $this->accountPayload(
+                    $result['account']
+                ),
+            ]);
+        } catch (DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Função de transferência de saldo entre contas
+     */
+    public function transfer(TransferRequest $request, FinancialTransactionService $service) 
+    {
+        $account = $this->authenticatedAccount();
+
+        if (!$account) {
+            return response()->json([
+                'message' => 'O usuário autenticado não possui conta.',
+            ], 404);
+        }
+
+        $data = $request->validated();
+
+        try {
+            $result = $service->transfer(
+                $account->id,
+                $data['destination_account_number'],
+                $data['destination_agency'],
+                Money::toCents($data['amount'])
+            );
+
+            return response()->json([
+                'message' => 'Transferência realizada com sucesso.',
+                'reference_id' => $result['reference_id'],
+                'account' => $this->accountPayload(
+                    $result['account']
+                ),
+            ]);
+        } catch (DomainException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Função que retorna a listagem de todas as transações realizadas em uma conta
+     */
+    public function listAllClientTransaction()
+    {
+        $account = $this->authenticatedAccount();
+
+        if (!$account) {
+            return response()->json([
+                'message' => 'O usuário autenticado não possui conta.',
+            ], 404);
+        }
+
+        $transactions = $account->transactions()
+                                ->latest()
+                                ->get()
+                                ->map(fn ($transaction) => [
+                                    'id' => $transaction->id,
+                                    'direction' => $transaction->direction,
+                                    'operation' => $transaction->operation,
+                                    'amount' => Money::format($transaction->amount_cents),
+                                    'amount_cents' => $transaction->amount_cents,
+                                    'reference_id' => $transaction->reference_id,
+                                    'created_at' => $transaction->created_at?->toISOString(),
+                                ]);
 
         return response()->json([
-            'client' => $client,
-            'account' => [
-                'id' => $account->id,
-                'number' => $account->number,
-                'agency' => $account->agency,
-                'balance' => $account->balance,
-                'status' => $account->status,
-            ],
-            'transactions' => $transactions
-        ], 200);
+            'account' => $this->accountPayload($account),
+            'transactions' => $transactions,
+        ]);
+    }
+
+    private function authenticatedAccount(): ?Accounts
+    {
+        $userId = Auth::id();
+
+        return Accounts::whereHas('client', function ($query) use ($userId) {
+                $query->where('user_id', $userId);
+            })
+            ->first();
+    }
+
+    private function accountPayload(Accounts $account): array
+    {
+        return [
+            'id' => $account->id,
+            'number' => $account->number,
+            'agency' => $account->agency,
+            'balance' => Money::format($account->balance_cents),
+            'balance_cents' => $account->balance_cents,
+            'status' => $account->status,
+        ];
     }
 
     private function createAccount(Client $client)
     {
-        $account = $client->accounts()->create([
-            'number' => rand(100000, 999999)
+        return $client->accounts()->create([
+            'number' => (string) random_int(100000, 999999),
+            'balance_cents' => 0,
+            'status' => 'active',
         ]);
-
-        return $account;
     }
 
     private function createClient($user, $data)

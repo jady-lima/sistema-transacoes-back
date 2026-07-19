@@ -23,7 +23,9 @@ Route::middleware('auth:sanctum')->group(function () {
     //Cliente
     Route::middleware('role:cliente')->prefix('cliente')->group(function () {
         Route::post('/contas', [AccountController::class, 'store']);
-        Route::post('/contas/transacao', [AccountController::class, 'newTransaction']);
         Route::get('/contas', [AccountController::class, 'listAllClientTransaction']);
+        Route::post('/contas/depositos', [AccountController::class, 'deposit']);
+        Route::post('/contas/saques', [AccountController::class, 'withdrawal']);
+        Route::post('/contas/transferencias', [AccountController::class, 'transfer']);
     });
 });
