@@ -14,8 +14,9 @@ return new class extends Migration
         Schema::create('clients', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')
+                  ->unique()
                   ->constrained('users')
-                  ->onDelete('cascade');
+                  ->restrictOnDelete();
             $table->string('phone', 30);
             $table->string('cpf', 11)->unique();
             $table->timestamps();

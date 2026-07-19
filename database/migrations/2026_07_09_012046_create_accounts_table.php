@@ -14,13 +14,21 @@ return new class extends Migration
         Schema::create('accounts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')
+                  ->unique()
                   ->constrained('clients')
-                  ->onDelete('cascade');
+                  ->restrictOnDelete();
             $table->string('number')->unique();
             $table->string('agency')->default('0001');
-            $table->double('balance')->default(0);
+            $table->bigInteger('balance_cents')->default(0);
+            $table->enum('status', ['active','blocked','closed',])->default('active');
             $table->timestamps();
         });
+
+        DB::statement(
+            'ALTER TABLE accounts
+             ADD CONSTRAINT accounts_balance_cents_non_negative
+             CHECK (balance_cents >= 0)'
+        );
     }
 
     /**

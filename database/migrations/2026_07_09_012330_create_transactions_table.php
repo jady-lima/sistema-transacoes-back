@@ -15,11 +15,23 @@ return new class extends Migration
             $table->id();
             $table->foreignId('account_id')
                   ->constrained('accounts')
-                  ->onDelete('cascade');
-            $table->enum('type', ['credit', 'debit']);
-            $table->double('amount');
+                  ->restrictOnDelete();
+            $table->enum('direction', ['credit', 'debit',]);
+            $table->enum('operation', ['deposit', 'withdrawal', 'transfer',]);
+            $table->bigInteger('amount_cents');
+            
+            $table->uuid('reference_id')
+                ->nullable()
+                ->index();
+
             $table->timestamps();
         });
+
+        DB::statement(
+            'ALTER TABLE transactions
+             ADD CONSTRAINT transactions_amount_cents_positive
+             CHECK (amount_cents > 0)'
+        );
     }
 
     /**
