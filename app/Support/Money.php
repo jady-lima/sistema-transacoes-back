@@ -31,7 +31,7 @@ final class Money
 
         $cents = ((int) $integerPart * 100) + (int) $decimalPart;
 
-        if ($cents < 0) {
+        if ($cents <= 0) {
             throw new InvalidArgumentException(
                 'O valor precisa ser maior ou igual a zero.'
             );
