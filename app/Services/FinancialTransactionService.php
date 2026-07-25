@@ -12,32 +12,35 @@ class FinancialTransactionService
 {
     /**
      * Função que realiza o deposito em uma conta
+     * @return array{
+     *     account: Accounts,
+     *     transaction: Transactions
+     * }
      */
-    public function deposit(int $accountId, int $amountCents): array 
+    public function deposit(Accounts $account, int $amountCents): array 
     {
-        return DB::transaction(function () use (
-            $accountId,
-            $amountCents
-        ) {
-            $account = $this->findLockedAccount($accountId);
-            $this->ensureActive($account);
+        if ($amountCents <= 0) {
+            throw new InvalidArgumentException('O valor do depósito deve ser maior que zero.');
+        }
 
-            $account->balance_cents += $amountCents;
-            $account->save();
+        return DB::transaction(function () use ($account, $amountCents) {
+            $lockedAccount = Accounts::lockForUpdate()
+                                    ->findOrFail($account->id);
 
-            $referenceId = (string) Str::uuid();
+            $lockedAccount->increment(
+                'balance_cents',
+                $amountCents
+            );
 
-            Transactions::create([
-                'account_id' => $account->id,
-                'direction' => 'credit',
-                'operation' => 'deposit',
-                'amount_cents' => $amountCents,
-                'reference_id' => $referenceId,
-            ]);
+            $transaction = $lockedAccount->transactions()
+                                        ->create([
+                                            'type' => 'credit',
+                                            'amount_cents' => $amountCents,
+                                        ]);
 
             return [
-                'account' => $account->refresh(),
-                'reference_id' => $referenceId,
+                'account' => $lockedAccount->fresh(),
+                'transaction' => $transaction,
             ];
         });
     }
