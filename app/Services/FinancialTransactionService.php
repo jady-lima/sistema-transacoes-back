@@ -100,92 +100,87 @@ class FinancialTransactionService
 
     /**
      * Função de transferênca de saldo entre contas
+     * 
+     * @return array{
+     *     source_account: Accounts,
+     *     destination_account: Accounts,
+     *     debit_transaction: Transactions,
+     *     credit_transaction: Transactions
+     * }
+     *
+     * @throws ValidationException
      */
-    public function transfer(int $originAccountId, string $destinationNumber, string $destinationAgency, int $amountCents): array 
+    public function transfer(Accounts $sourceAccount, Accounts $destinationAccount, int $amountCents): array 
     {
-        return DB::transaction(function () use (
-            $originAccountId,
-            $destinationNumber,
-            $destinationAgency,
-            $amountCents
-        ) {
-            $destinationAccountId = Accounts::where('number', $destinationNumber)
-                                            ->where('agency', $destinationAgency)
-                                            ->value('id');
-
-            if ($destinationAccountId === null) {
-                throw new DomainException(
-                    'Conta de destino não encontrada.'
-                );
-            }
-
-            $destinationAccountId = (int) $destinationAccountId;
-            if ($originAccountId === $destinationAccountId) {
-                throw new DomainException(
-                    'Não é possível transferir para a própria conta.'
-                );
-            }
-            
-            $accountIds = [
-                $originAccountId,
-                $destinationAccountId,
-            ];
-
-            sort($accountIds);
-
-            $accounts = Accounts::whereIn('id', $accountIds)
-                                ->orderBy('id')
-                                ->lockForUpdate()
-                                ->get()
-                                ->keyBy('id');
-
-            $originAccount = $accounts->get($originAccountId);
-            $destinationAccount = $accounts->get(
-                $destinationAccountId
-            );
-
-            if (!$originAccount || !$destinationAccount) {
-                throw new DomainException(
-                    'Uma das contas envolvidas não foi encontrada.'
-                );
-            }
-
-            $this->ensureActive($originAccount);
-            $this->ensureActive($destinationAccount);
-            $this->ensureSufficientBalance(
-                $originAccount,
-                $amountCents
-            );
-
-            $originAccount->balance_cents -= $amountCents;
-            $destinationAccount->balance_cents += $amountCents;
-
-            $originAccount->save();
-            $destinationAccount->save();
-
-            $referenceId = (string) Str::uuid();
-
-            Transactions::create([
-                'account_id' => $originAccount->id,
-                'direction' => 'debit',
-                'operation' => 'transfer',
-                'amount_cents' => $amountCents,
-                'reference_id' => $referenceId,
+        if ($amountCents <= 0) {
+            throw ValidationException::withMessages([
+                'amount_cents' => ['O valor da transferência deve ser maior que zero.'],
             ]);
+        }
 
-            Transactions::create([
-                'account_id' => $destinationAccount->id,
-                'direction' => 'credit',
-                'operation' => 'transfer',
-                'amount_cents' => $amountCents,
-                'reference_id' => $referenceId,
+        if ($sourceAccount->is($destinationAccount)) {
+            throw ValidationException::withMessages([
+                'destination_number' => ['A conta de destino deve ser diferente da conta de origem.'],
             ]);
+        }
 
-            return [
-                'account' => $originAccount->refresh(),
-                'reference_id' => $referenceId,
-            ];
-        });
+        return DB::transaction(
+            function () use ($sourceAccount, $destinationAccount, $amountCents) {
+                $accountIds = [
+                    $sourceAccount->getKey(),
+                    $destinationAccount->getKey(),
+                ];
+
+                sort($accountIds);
+
+                $lockedAccounts = Accounts::whereIn('id', $accountIds)
+                                        ->orderBy('id')
+                                        ->lockForUpdate()
+                                        ->get()
+                                        ->keyBy('id');
+
+                $lockedSource = $lockedAccounts->get($sourceAccount->getKey());
+                $lockedDestination = $lockedAccounts->get($destinationAccount->getKey());
+
+                if (!$lockedSource || !$lockedDestination) {
+                    throw ValidationException::withMessages([
+                        'destination_number' => ['Não foi possível localizar as contas da transferência.'],
+                    ]);
+                }
+
+                if ($lockedSource->balance_cents < $amountCents) {
+                    throw ValidationException::withMessages([
+                        'amount_cents' => ['Saldo insuficiente para realizar a transferência.'],
+                    ]);
+                }
+
+                $lockedSource->balance_cents -= $amountCents;
+                $lockedSource->save();
+
+                $lockedDestination->balance_cents += $amountCents;
+                $lockedDestination->save();
+
+                $debitTransaction = $lockedSource->transactions()
+                                                ->create([
+                                                    'type' => 'debit',
+                                                    'amount_cents' => $amountCents,
+                                                ]);
+
+                $creditTransaction = $lockedDestination->transactions()
+                                                    ->create([
+                                                        'type' => 'credit',
+                                                        'amount_cents' => $amountCents,
+                                                    ]);
+
+                return [
+                    'source_account' => $lockedSource->fresh(),
+                    'destination_account' => $lockedDestination->fresh(),
+                    'debit_transaction' => $debitTransaction,
+                    'credit_transaction' => $creditTransaction,
+                ];
+            },
+            attempts: 3
+        );
     }
 
     private function findLockedAccount(int $accountId): Accounts
