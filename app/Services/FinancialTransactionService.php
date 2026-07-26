@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Accounts;
 use App\Models\Transactions;
 use DomainException;
+use InvalidArgumentException;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -12,6 +14,7 @@ class FinancialTransactionService
 {
     /**
      * Função que realiza o deposito em uma conta
+     * 
      * @return array{
      *     account: Accounts,
      *     transaction: Transactions
@@ -47,34 +50,50 @@ class FinancialTransactionService
 
     /**
      * Função de saque de um valor em uma conta
+     * @return array{
+     *     account: Accounts,
+     *     transaction: Transactions
+     * }
+     *
+     * @throws ValidationException
      */
-    public function withdraw(int $accountId, int $amountCents): array 
+    public function withdraw(Accounts $account, int $amountCents): array 
     {
-        return DB::transaction(function () use (
-            $accountId,
-            $amountCents
-        ) {
-            $account = $this->findLockedAccount($accountId);
-
-            $this->ensureActive($account);
-            $this->ensureSufficientBalance($account, $amountCents);
-
-            $account->balance_cents -= $amountCents;
-            $account->save();
-
-            $referenceId = (string) Str::uuid();
-
-            Transactions::create([
-                'account_id' => $account->id,
-                'direction' => 'debit',
-                'operation' => 'withdrawal',
-                'amount_cents' => $amountCents,
-                'reference_id' => $referenceId,
+        if ($amountCents <= 0) {
+            throw ValidationException::withMessages([
+                'amount_cents' => [
+                    'O valor do saque deve ser maior que zero.',
+                ],
             ]);
+        }
+
+        return DB::transaction(function () use ($account, $amountCents) {
+            $lockedAccount = Accounts::whereKey($account->getKey())
+                                    ->lockForUpdate()
+                                    ->firstOrFail();
+
+            if ($lockedAccount->balance_cents < $amountCents) {
+                throw ValidationException::withMessages([
+                    'amount_cents' => [
+                        'Saldo insuficiente para realizar o saque.',
+                    ],
+                ]);
+            }
+
+            $lockedAccount->decrement(
+                'balance_cents',
+                $amountCents
+            );
+
+            $transaction = $lockedAccount->transactions()
+                                        ->create([
+                                            'type' => 'debit',
+                                            'amount_cents' => $amountCents,
+                                        ]);
 
             return [
-                'account' => $account->refresh(),
-                'reference_id' => $referenceId,
+                'account' => $lockedAccount->fresh(),
+                'transaction' => $transaction,
             ];
         });
     }

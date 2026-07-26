@@ -7,6 +7,7 @@ use \App\Http\Controllers\AuthController;
 use \App\Http\Controllers\AccountController;
 use \App\Http\Controllers\UserController;
 use App\Http\Controllers\DepositController;
+use App\Http\Controllers\WithdrawalController;
 
 Route::post('/register', [UserController::class, 'store']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -27,6 +28,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/contas', [AccountController::class, 'listAllClientTransaction']);
         
         Route::post('/contas/{account}/depositos', DepositController::class);
+        Route::post('/contas/{account}/saques', WithdrawalController::class);
         
         Route::post('/contas/depositos', [AccountController::class, 'deposit']);
         Route::post('/contas/saques', [AccountController::class, 'withdrawal']);
